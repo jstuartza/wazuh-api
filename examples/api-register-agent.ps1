@@ -8,8 +8,9 @@
 #  and/or modify it under the terms of the GNU General Public
 #  License (version 2) as published by the FSF - Free Software
 #  Foundation.
+# Note this script requires admin privileges to modify the configuration files and restart the services.
 ###
-
+#
 function Ignore-SelfSignedCerts {
     add-type @"
         using System.Net;
@@ -29,7 +30,7 @@ function Ignore-SelfSignedCerts {
 function req($method, $resource, $params){
     $base64AuthInfo = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $username, $password)))
     $url = $base_url + $resource;
-
+    #[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 #uncomment if using https to connect to the API and set appropriate level 1.0, 1.1, 1.2
     try{
         return Invoke-WebRequest -Headers @{Authorization=("Basic {0}" -f $base64AuthInfo)} -Method $method -Uri $url -Body $params
     }catch{
@@ -42,11 +43,16 @@ function req($method, $resource, $params){
 $base_url = "http://<Wazuh-Manager-IP>:55000"
 $username = "foo"
 $password = "bar"
-$agent_name = $env:computername
+$agent_name = $env:computername+"."+$env:USERDNSDOMAIN #set the agent name to the fqdn (helps if you have agents from different domains connecting)
 $path = "C:\Program Files (x86)\ossec-agent\"
-$config = "C:\Program Files (x86)\ossec-agent\ossec.conf"
+[xml]$config = Get-Content -Path $path\ossec.conf #Call the config as an XML file
+#$config = "C:\Program Files (x86)\ossec-agent\ossec.conf"
 $wazuh_manager = "<Wazuh-Manager-IP>"
+$wazuh_manager_protocol = "<PROTOCOL UDP/TCP>" #cusotmization if your agent connects over tcp vs udp default udp
+$wazuh_manager_port = "<AGENT CONNECTION PORT>" #Customization if your agent uses a different port. 1514 default
 Ignore-SelfSignedCerts
+
+
 
 # Test API integration to make sure IE has run through initial startup dialogue - This can be a problem with new servers.
 
@@ -109,8 +115,13 @@ $srvStat = Get-Service $srvName
 Write-Output "$($srvName) is now $($srvStat.status)"
 
 Start-Sleep -s 10
-
-Add-Content $config "`n<ossec_config>   <client>      <server-ip>$($wazuh_manager)</server-ip>   </client> </ossec_config>"
+$config.ossec_config.client.server.address = "$wazuh_manager"
+$config.ossec_config.client.server.port = "$wazuh_manager_port"
+$config.ossec_config.client.server.protocol = "$wazuh_manager_protocol"
+$config.Save($path+"ossec.conf")
+#The line below constantly adds entries if this is run as a startup script eventually corrupting the config.
+#Also it uses the incorrect headers for the version 3 client it has changed now to client\server\address not client\server-ip
+#Add-Content $config "`n<ossec_config>   <client>      <server-ip>$($wazuh_manager)</server-ip>   </client> </ossec_config>"
 
 Start-Sleep -s 10
 
@@ -140,7 +151,13 @@ Write-Output "$($srvName) is now $($srvStat.status)"
 
 Start-Sleep -s 10
 
-Add-Content $config "`n<ossec_config>   <client>      <server-ip>$($wazuh_manager)</server-ip>   </client> </ossec_config>"
+$config.ossec_config.client.server.address = "$wazuh_manager"
+$config.ossec_config.client.server.port = "$wazuh_manager_port"
+$config.ossec_config.client.server.protocol = "$wazuh_manager_protocol"
+$config.Save($path+"ossec.conf")
+#The line below constantly adds entries if this is run as a startup script eventually corrupting the config.
+#Also it uses the incorrect headers for the version 3 client it has changed now to client\server\address not client\server-ip
+#Add-Content $config "`n<ossec_config>   <client>      <server-ip>$($wazuh_manager)</server-ip>   </client> </ossec_config>"
 
 Start-Sleep -s 10
 
